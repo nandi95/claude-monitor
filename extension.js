@@ -15,7 +15,9 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const REFRESH_SECONDS = 120; // API mode bills a tiny request each poll; tune this.
+// Subscription mode is free (just reads the usage endpoint), so 60s is fine.
+// API mode bills a tiny request each poll — raise this if you use that mode.
+const REFRESH_SECONDS = 60;
 
 const ClaudeIndicator = GObject.registerClass(
 class ClaudeIndicator extends PanelMenu.Button {

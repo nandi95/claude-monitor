@@ -9,19 +9,46 @@ Edit `~/.config/claude-monitor/config.json`:
 
 ```json
 {
-  "mode": "api",                 // or "subscription"
+  "mode": "subscription",        // or "api"
+  "panel_metric": "max",         // max | session | week | week_sonnet
   "api_key_env": "ANTHROPIC_API_KEY",
-  "model": "claude-haiku-4-5",
-  "window_hours": 5,
-  "token_cap": null
+  "model": "claude-haiku-4-5"
 }
 ```
+
+### `subscription` mode (Pro/Max) — default
+Reads the same endpoint the web UI's "Plan usage limits" panel and Claude Code's
+`/usage` command use:
+
+```
+GET https://api.anthropic.com/api/oauth/usage
+Authorization: Bearer <Claude Code OAuth token>
+anthropic-beta: oauth-2025-04-20
+```
+
+The token comes from `~/.claude/.credentials.json` (created when you log into
+Claude Code). The response gives utilization percentages and reset times:
+
+- `five_hour`        → "Session" (the rolling 5-hour window)
+- `seven_day`        → "Weekly" (all models)
+- `seven_day_sonnet` / `seven_day_opus` → per-model weekly windows
+
+The helper auto-refreshes the OAuth token (via `/v1/oauth/token`) when it's
+within 5 minutes of expiry and writes the new token back atomically, so the
+monitor keeps working without you re-running Claude Code.
+
+`panel_metric` chooses which number the top bar shows: `max` (default, the
+most-constrained window — safest), `session`, `week`, or `week_sonnet`.
+
+> ⚠️ `/api/oauth/usage` is **undocumented** — Anthropic can change or remove it
+> at any time. There is no official public API for subscription limits.
 
 ### `api` mode (API key + billing)
 Makes one minimal `POST /v1/messages` request each poll and reads the
 `anthropic-ratelimit-*` response headers (requests/tokens/input/output limits +
 remaining). There is **no** "get my limits" GET endpoint, so it reads them off a
-real call — that bills a few tokens per poll, so the default refresh is 120s.
+real call — that bills a few tokens per poll, so raise `REFRESH_SECONDS` in
+`extension.js` if you use this mode.
 
 **Environment gotcha:** GNOME Shell spawns the helper *without* your shell's
 environment, so `ANTHROPIC_API_KEY` from `.bashrc`/`.zshrc` won't be visible.
@@ -32,17 +59,6 @@ mkdir -p ~/.config/environment.d
 printf 'ANTHROPIC_API_KEY=sk-ant-...\n' > ~/.config/environment.d/claude.conf
 # then log out and back in
 ```
-
-### `subscription` mode (Pro/Max)
-No official API exists for consumer-subscription limits. This tallies token
-usage from Claude Code's local transcripts (`~/.claude/projects/**/*.jsonl`)
-over the rolling `window_hours`. It's a best-effort estimate.
-
-- Set `token_cap` to your known cap to get a `%`; otherwise it shows the raw
-  token count.
-- The tally currently includes `cache_read_input_tokens`, which Claude Code
-  uses heavily and inflates the number. To track "real" usage, edit
-  `run_subscription` in `helper.py` and drop the cache lines.
 
 ## Install
 

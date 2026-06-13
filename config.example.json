@@ -1,7 +1,6 @@
 {
-  "mode": "api",
+  "mode": "subscription",
+  "panel_metric": "max",
   "api_key_env": "ANTHROPIC_API_KEY",
-  "model": "claude-haiku-4-5",
-  "window_hours": 5,
-  "token_cap": null
+  "model": "claude-haiku-4-5"
 }
