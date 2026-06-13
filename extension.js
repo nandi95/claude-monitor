@@ -15,9 +15,13 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// Subscription mode is free (just reads the usage endpoint), so 60s is fine.
-// API mode bills a tiny request each poll — raise this if you use that mode.
+// Normal poll interval. The usage endpoint is rate-limited per account by
+// request frequency (shared with Claude Code's own usage checks), so we keep
+// this gentle and back off on errors rather than hammering.
 const REFRESH_SECONDS = 120;
+// On a failed poll (429, network blip), wait this long and double on each
+// repeat, capped here. Resets to REFRESH_SECONDS after a success.
+const MAX_BACKOFF_SECONDS = 1800;
 
 const ClaudeIndicator = GObject.registerClass(
 class ClaudeIndicator extends PanelMenu.Button {
@@ -41,12 +45,36 @@ class ClaudeIndicator extends PanelMenu.Button {
         refresh.connect('activate', () => this._refresh());
         this.menu.addMenuItem(refresh);
 
+        this._backoff = 0;
         this._refresh();
+    }
+
+    // Self-rescheduling one-shot timer so we can vary the delay (backoff).
+    _scheduleNext(seconds) {
+        if (this._timeout) {
+            GLib.source_remove(this._timeout);
+            this._timeout = null;
+        }
         this._timeout = GLib.timeout_add_seconds(
-            GLib.PRIORITY_DEFAULT, REFRESH_SECONDS, () => {
+            GLib.PRIORITY_DEFAULT, seconds, () => {
+                this._timeout = null;
                 this._refresh();
-                return GLib.SOURCE_CONTINUE;
+                return GLib.SOURCE_REMOVE;
             });
+    }
+
+    // Decide when to poll next: base interval on success, growing backoff on
+    // failure so we stop adding to a rate limit that's already unhappy.
+    _afterPoll(ok) {
+        if (ok) {
+            this._backoff = 0;
+            this._scheduleNext(REFRESH_SECONDS);
+        } else {
+            this._backoff = this._backoff
+                ? Math.min(this._backoff * 2, MAX_BACKOFF_SECONDS)
+                : REFRESH_SECONDS * 2;
+            this._scheduleNext(this._backoff);
+        }
     }
 
     _refresh() {
@@ -57,22 +85,21 @@ class ClaudeIndicator extends PanelMenu.Button {
                 ['python3', helper],
                 Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
         } catch (e) {
-            this._label.set_text('Claude ✗');
-            this._detail.label.set_text(`spawn error: ${e.message}`);
+            this._setError(`spawn error: ${e.message}`);
+            this._afterPoll(false);
             return;
         }
 
         proc.communicate_utf8_async(null, null, (p, res) => {
-            let out = '';
+            let ok = false;
             try {
                 const [, stdout, stderr] = p.communicate_utf8_finish(res);
-                out = stdout;
                 if (!stdout && stderr) throw new Error(stderr.trim());
+                ok = this._render(stdout);
             } catch (e) {
                 this._setError(String(e.message).slice(0, 200));
-                return;
             }
-            this._render(out);
+            this._afterPoll(ok);
         });
     }
 
@@ -82,12 +109,12 @@ class ClaudeIndicator extends PanelMenu.Button {
             data = JSON.parse(jsonLine);
         } catch {
             this._setError(`bad output: ${jsonLine.slice(0, 120)}`);
-            return;
+            return false;
         }
 
         if (data.error) {
             this._setError(data.error);
-            return;
+            return false;
         }
 
         // data.percent: 0–100 of the most-constrained dimension (or null).
@@ -104,6 +131,7 @@ class ClaudeIndicator extends PanelMenu.Button {
         else if (pct != null && pct >= 70) this._label.add_style_class_name('claude-warn');
 
         this._detail.label.set_text((data.lines ?? []).join('\n') || 'No data');
+        return true;
     }
 
     // A poll failed (rate limit, network blip, transient endpoint error).
