@@ -17,7 +17,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 // Subscription mode is free (just reads the usage endpoint), so 60s is fine.
 // API mode bills a tiny request each poll — raise this if you use that mode.
-const REFRESH_SECONDS = 60;
+const REFRESH_SECONDS = 120;
 
 const ClaudeIndicator = GObject.registerClass(
 class ClaudeIndicator extends PanelMenu.Button {
@@ -69,8 +69,7 @@ class ClaudeIndicator extends PanelMenu.Button {
                 out = stdout;
                 if (!stdout && stderr) throw new Error(stderr.trim());
             } catch (e) {
-                this._label.set_text('Claude ✗');
-                this._detail.label.set_text(String(e.message).slice(0, 200));
+                this._setError(String(e.message).slice(0, 200));
                 return;
             }
             this._render(out);
@@ -82,21 +81,21 @@ class ClaudeIndicator extends PanelMenu.Button {
         try {
             data = JSON.parse(jsonLine);
         } catch {
-            this._label.set_text('Claude ?');
-            this._detail.label.set_text(`bad output: ${jsonLine.slice(0, 120)}`);
+            this._setError(`bad output: ${jsonLine.slice(0, 120)}`);
             return;
         }
 
         if (data.error) {
-            this._label.set_text('Claude ✗');
-            this._detail.label.set_text(data.error);
+            this._setError(data.error);
             return;
         }
 
         // data.percent: 0–100 of the most-constrained dimension (or null).
         // data.label:   short panel text. data.lines: array of detail strings.
         const pct = data.percent;
-        this._label.set_text(data.label ?? 'Claude');
+        this._lastLabel = data.label ?? 'Claude';
+        this._label.set_text(this._lastLabel);
+        this._label.remove_style_class_name('claude-stale');
 
         // Tint the label as usage climbs.
         this._label.remove_style_class_name('claude-warn');
@@ -105,6 +104,19 @@ class ClaudeIndicator extends PanelMenu.Button {
         else if (pct != null && pct >= 70) this._label.add_style_class_name('claude-warn');
 
         this._detail.label.set_text((data.lines ?? []).join('\n') || 'No data');
+    }
+
+    // A poll failed (rate limit, network blip, transient endpoint error).
+    // Keep the last good reading on the panel — just dim it and show the error
+    // in the dropdown — so a single hiccup doesn't blank the indicator.
+    _setError(msg) {
+        this._detail.label.set_text(msg);
+        if (this._lastLabel) {
+            this._label.set_text(this._lastLabel);
+            this._label.add_style_class_name('claude-stale');
+        } else {
+            this._label.set_text('Claude ✗');
+        }
     }
 
     destroy() {

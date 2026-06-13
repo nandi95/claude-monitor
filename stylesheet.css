@@ -10,3 +10,8 @@
     color: #e01b24;
     font-weight: bold;
 }
+
+/* Last reading is stale (a poll failed); dim it but keep showing it. */
+.claude-stale {
+    opacity: 0.5;
+}

@@ -110,12 +110,14 @@ def _refresh(creds):
             if tok.get("expires_in"):
                 oauth["expiresAt"] = int((time.time() + tok["expires_in"]) * 1000)
             _write_creds(creds)
-            return oauth["accessToken"]
+            return oauth["accessToken"], None
         except urllib.error.HTTPError as e:
             last_err = f"HTTP {e.code}: {e.read()[:120].decode(errors='replace')}"
         except Exception as e:
             last_err = str(e)
-    emit({"error": f"token refresh failed: {last_err}"})
+    # Don't exit here — let the caller decide whether the current token still
+    # works. Transient network/Cloudflare blips shouldn't blank the panel.
+    return None, last_err
 
 
 def _bearer():
@@ -125,8 +127,15 @@ def _bearer():
     expires_at = (oauth.get("expiresAt") or 0) / 1000
     if not token:
         emit({"error": "no accessToken in credentials"})
-    if expires_at and expires_at - time.time() < REFRESH_BUFFER_S:
-        token = _refresh(creds)
+    now = time.time()
+    if expires_at and expires_at - now < REFRESH_BUFFER_S:
+        new_token, err = _refresh(creds)
+        if new_token:
+            return new_token
+        # Refresh failed (often transient). Keep using the existing token if it
+        # hasn't actually expired yet; only error out if it's truly dead.
+        if not expires_at or expires_at <= now:
+            emit({"error": f"token refresh failed: {err}"})
     return token
 
 
