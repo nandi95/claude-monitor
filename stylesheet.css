@@ -1,0 +1,12 @@
+.claude-panel-label {
+    padding: 0 4px;
+}
+
+.claude-warn {
+    color: #e5a50a;
+}
+
+.claude-crit {
+    color: #e01b24;
+    font-weight: bold;
+}

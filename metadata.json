@@ -1,0 +1,7 @@
+{
+  "uuid": "claude-monitor@nandork.github.io",
+  "name": "Claude Rate Limit Monitor",
+  "description": "Shows Claude API / subscription rate-limit usage in the GNOME top bar.",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/nandork/claude-monitor"
+}

@@ -1,0 +1,8 @@
+# Local runtime config lives in ~/.config/claude-monitor/config.json, never here.
+config.json
+
+# Editor / OS noise
+*.swp
+.DS_Store
+__pycache__/
+*.pyc
