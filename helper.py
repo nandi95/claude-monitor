@@ -203,7 +203,7 @@ def run_subscription(cfg):
     if panel is None:
         panel = metrics["max"]
 
-    emit({"percent": panel, "label": f"C {panel}%" if panel is not None else "C –",
+    emit({"percent": panel, "label": f"Claude {panel}%" if panel is not None else "Claude –",
           "lines": lines})
 
 
@@ -261,7 +261,7 @@ def run_api(cfg):
         lines.append(f"retry-after: {headers.get('retry-after')}s")
     if not lines:
         emit({"error": "no anthropic-ratelimit-* headers (check key/model)"})
-    emit({"percent": worst, "label": f"C {worst}%" if worst is not None else "C OK",
+    emit({"percent": worst, "label": f"Claude {worst}%" if worst is not None else "Claude OK",
           "lines": lines})
 
 

@@ -1,5 +1,7 @@
 # Claude Rate Limit Monitor
 
+![Screenshot](img.png)
+
 A GNOME Shell top-bar extension that shows Claude rate-limit / usage. Works in
 two modes so it's useful regardless of how you access Claude.
 
